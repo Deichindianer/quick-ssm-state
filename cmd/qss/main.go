@@ -3,53 +3,142 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
+	"strings"
+	"time"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	ui "github.com/gizak/termui/v3"
 	"github.com/gizak/termui/v3/widgets"
-	"log"
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 )
 
 func main() {
-
-	association, err := getAssociation("")
-	if err != nil {
-		log.Fatal(err)
-	}
-	total := getAssociationTotalTargets(association)
-	success := getAssociationSuccessTargets(association)
-	failed := getAssociationFailedTargets(association)
-	pending := getAssociationPendingTargets(association)
-
 	if err := ui.Init(); err != nil {
 		log.Fatalf("failed to initialize termui: %v", err)
 	}
 	defer ui.Close()
 
-	gauge := widgets.NewGauge()
-	gauge.Title = "Percent of successful runs"
-	gauge.SetRect(100, 10, 150, 14)
-	gauge.Percent = (success / total) * 100
-	gauge.Label = fmt.Sprintf("%v%%)", gauge.Percent)
+	termWidth, termHeight := ui.TerminalDimensions()
 
-	g2 := widgets.NewGauge()
-	g2.Title = "Percent of failed runs"
-	g2.SetRect(0, 20, 50, 24)
-	g2.Percent = (failed / total) * 100
-	g2.Label = fmt.Sprintf("%v%%)", g2.Percent)
+	ls := widgets.NewList()
+	ls.SelectedRowStyle = ui.NewStyle(ui.ColorCyan)
+	ls.Rows = prepareAssociationList()
+	ls.Title = "State Associations"
+	ls.WrapText = true
 
-	g3 := widgets.NewGauge()
-	g3.Title = "Percent of pending runs"
-	g3.SetRect(0, 10, 50, 14)
-	g3.Percent = (pending / total) * 100
-	g3.Label = fmt.Sprintf("%v%%)", g3.Percent)
+	ils := widgets.NewList()
+	initialILSRow, err := getAssociationTargets(ls.Rows[0])
+	if err != nil {
+		log.Fatal(err)
+	}
+	ils.Rows = initialILSRow
+	ils.Title = "Target Selector"
+
+	bc := widgets.NewBarChart()
+	bc.BarWidth = (termWidth - 10) / 2 / 4
+	bc.Title = "All target states of the association"
+	bc.Labels = []string{"Success", "Failed", "Pending", "Skipped"}
+	bc.Data = calculateStatusBarChartData(ls.Rows[0])
+	bc.BarColors = []ui.Color{ui.ColorGreen, ui.ColorRed, ui.ColorYellow, ui.ColorCyan}
+	bc.LabelStyles = []ui.Style{ui.NewStyle(ui.ColorWhite)}
+	bc.NumStyles = []ui.Style{ui.NewStyle(ui.ColorBlack)}
+	bc.PaddingRight = 1
+	bc.PaddingLeft = 1
 
 	grid := ui.NewGrid()
-	termWidth, termHeight := ui.TerminalDimensions()
 	grid.SetRect(0, 0, termWidth, termHeight)
 
+	grid.Set(
+		ui.NewRow(1.0,
+			ui.NewCol(0.5, ls),
+			ui.NewCol(0.5,
+				ui.NewRow(0.5, bc),
+				ui.NewRow(0.5, ils),
+			),
+		),
+	)
+
+	ui.Render(grid)
+
+	uiEvents := ui.PollEvents()
+	var previousKey string
+	ticker := time.NewTicker(time.Second * 5)
+	defer ticker.Stop()
+	for {
+		select {
+		case e := <-uiEvents:
+			switch e.ID {
+			case "q", "<C-c>":
+				return
+			case "<Down>", "j":
+				ls.ScrollDown()
+				bc.Data = calculateStatusBarChartData(ls.Rows[ls.SelectedRow])
+				ilsRows, err := getAssociationTargets(ls.Rows[ls.SelectedRow])
+				if err != nil {
+					log.Fatal(err)
+				}
+				ils.Rows = ilsRows
+			case "<Up>", "k":
+				ls.ScrollUp()
+				bc.Data = calculateStatusBarChartData(ls.Rows[ls.SelectedRow])
+				ilsRows, err := getAssociationTargets(ls.Rows[ls.SelectedRow])
+				if err != nil {
+					log.Fatal(err)
+				}
+				ils.Rows = ilsRows
+			case "<Home>":
+				ls.ScrollTop()
+				bc.Data = calculateStatusBarChartData(ls.Rows[ls.SelectedRow])
+				ilsRows, err := getAssociationTargets(ls.Rows[ls.SelectedRow])
+				if err != nil {
+					log.Fatal(err)
+				}
+				ils.Rows = ilsRows
+			case "g":
+				if previousKey == "g" {
+					previousKey = ""
+					ls.ScrollTop()
+					bc.Data = calculateStatusBarChartData(ls.Rows[ls.SelectedRow])
+					ilsRows, err := getAssociationTargets(ls.Rows[ls.SelectedRow])
+					if err != nil {
+						log.Fatal(err)
+					}
+					ils.Rows = ilsRows
+				}
+			case "<End>", "G":
+				ls.ScrollBottom()
+				bc.Data = calculateStatusBarChartData(ls.Rows[ls.SelectedRow])
+				ilsRows, err := getAssociationTargets(ls.Rows[ls.SelectedRow])
+				if err != nil {
+					log.Fatal(err)
+				}
+				ils.Rows = ilsRows
+			case "<Resize>":
+				payload := e.Payload.(ui.Resize)
+				bc.BarWidth = (payload.Width - 10) / 2 / 4
+				grid.SetRect(0, 0, payload.Width, payload.Height)
+				ui.Clear()
+			case "r":
+				ls.Rows = prepareAssociationList()
+			}
+			previousKey = e.ID
+			ui.Render(grid)
+		case <-ticker.C:
+			bc.Data = calculateStatusBarChartData(ls.Rows[ls.SelectedRow])
+			ilsRows, err := getAssociationTargets(ls.Rows[ls.SelectedRow])
+			if err != nil {
+				log.Fatal(err)
+			}
+			ils.Rows = ilsRows
+			ui.Render(grid)
+		}
+	}
+}
+
+func prepareAssociationList() []string {
 	associations, err := listAssociations()
 	if err != nil {
 		log.Fatal(err)
@@ -57,35 +146,30 @@ func main() {
 
 	var associationNames []string
 	for _, a := range associations.Associations {
-		associationNames = append(associationNames, *a.Name)
+		associationNames = append(associationNames, fmt.Sprintf("%s %s", *a.AssociationId, *a.AssociationName))
 	}
-	ls := widgets.NewList()
-	ls.Rows = associationNames
-
-	grid.Set(
-		ui.NewRow(1.0,
-			ui.NewCol(1.0/2, ls),
-			ui.NewCol(1.0/2,
-				ui.NewRow(1.0/3, gauge),
-				ui.NewRow(1.0/3, g2),
-				ui.NewRow(1.0/3, g3),
-				),
-			),
-		)
-
-	ui.Render(grid)
-
-	uiEvents := ui.PollEvents()
-	for {
-		e := <-uiEvents
-		switch e.ID {
-		case "q", "<C-c>":
-			return
-		}
-	}
+	return associationNames
 }
 
-func listAssociations() (*ssm.ListAssociationsOutput, error){
+func calculateStatusBarChartData(associationString string) []float64 {
+	associationID := strings.Split(associationString, " ")[0]
+	a, err := getAssociation(associationID)
+	if err != nil {
+		log.Fatal(err)
+	}
+	s := getAssociationSuccessTargets(a)
+	f := getAssociationFailedTargets(a)
+	p := getAssociationPendingTargets(a)
+	sk := getAssociationSkippedTargets(a)
+	data := []float64{s, f, p, sk}
+	if s+f+p == 0 {
+		//data = append(data, 1)
+		data = []float64{}
+	}
+	return data
+}
+
+func listAssociations() (*ssm.ListAssociationsOutput, error) {
 	cfg, err := config.LoadDefaultConfig(context.Background())
 	if err != nil {
 		return nil, err
@@ -113,22 +197,32 @@ func getAssociation(associationID string) (*ssm.DescribeAssociationOutput, error
 	return association, nil
 }
 
-func getAssociationTotalTargets(association *ssm.DescribeAssociationOutput) int {
-	var total int
-	for _, count := range association.AssociationDescription.Overview.AssociationStatusAggregatedCount {
-		total += int(count)
+func getAssociationPendingTargets(association *ssm.DescribeAssociationOutput) float64 {
+	return float64(association.AssociationDescription.Overview.AssociationStatusAggregatedCount["Pending"])
+}
+
+func getAssociationSuccessTargets(association *ssm.DescribeAssociationOutput) float64 {
+	return float64(association.AssociationDescription.Overview.AssociationStatusAggregatedCount["Success"])
+}
+
+func getAssociationFailedTargets(association *ssm.DescribeAssociationOutput) float64 {
+	return float64(association.AssociationDescription.Overview.AssociationStatusAggregatedCount["Failed"])
+}
+
+func getAssociationSkippedTargets(association *ssm.DescribeAssociationOutput) float64 {
+	return float64(association.AssociationDescription.Overview.AssociationStatusAggregatedCount["Skipped"])
+}
+
+func getAssociationTargets(associationString string) ([]string, error) {
+	associationID := strings.Split(associationString, " ")[0]
+	a, err := getAssociation(associationID)
+	if err != nil {
+		return nil, err
 	}
-	return total
-}
-
-func getAssociationPendingTargets(association *ssm.DescribeAssociationOutput) int {
-	return int(association.AssociationDescription.Overview.AssociationStatusAggregatedCount["Pending"])
-}
-
-func getAssociationSuccessTargets(association *ssm.DescribeAssociationOutput) int {
-	return int(association.AssociationDescription.Overview.AssociationStatusAggregatedCount["Success"])
-}
-
-func getAssociationFailedTargets(association *ssm.DescribeAssociationOutput) int {
-	return int(association.AssociationDescription.Overview.AssociationStatusAggregatedCount["Failed"])
+	var result []string
+	for _, t := range a.AssociationDescription.Targets {
+		vals := strings.Join(t.Values, ", ")
+		result = append(result, fmt.Sprintf("%s:%s", *t.Key, vals))
+	}
+	return result, nil
 }
