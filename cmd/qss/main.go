@@ -72,7 +72,7 @@ func main() {
 
 	uiEvents := ui.PollEvents()
 	var previousKey string
-	var selectedAssociation string
+	selectedAssociation := ls.Rows[0]
 	ticker := time.NewTicker(time.Second * 5)
 	defer ticker.Stop()
 	for {
