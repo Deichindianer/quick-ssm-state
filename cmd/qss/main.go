@@ -72,6 +72,7 @@ func main() {
 
 	uiEvents := ui.PollEvents()
 	var previousKey string
+	var selectedAssociation string
 	ticker := time.NewTicker(time.Second * 5)
 	defer ticker.Stop()
 	for {
@@ -104,25 +105,26 @@ func main() {
 					exit(1, err)
 				}
 			case "<Enter>":
-				bc.Data, err = calculateStatusBarChartData(ls.Rows[ls.SelectedRow])
+				selectedAssociation = ls.Rows[ls.SelectedRow]
+				bc.Data, err = calculateStatusBarChartData(selectedAssociation)
 				if err != nil {
 					exit(1, err)
 				}
-				ilsRows, err := getAssociationTargets(ls.Rows[ls.SelectedRow])
+				ilsRows, err := getAssociationTargets(selectedAssociation)
 				if err != nil {
 					exit(1, err)
 				}
 				ils.Rows = ilsRows
-				bc.Title = fmt.Sprintf("Target states of the association: %s", ls.Rows[ls.SelectedRow])
+				bc.Title = fmt.Sprintf("Target states of the association: %s", selectedAssociation)
 			}
 			previousKey = e.ID
 			ui.Render(grid)
 		case <-ticker.C:
-			bc.Data, err = calculateStatusBarChartData(ls.Rows[ls.SelectedRow])
+			bc.Data, err = calculateStatusBarChartData(selectedAssociation)
 			if err != nil {
 				exit(1, err)
 			}
-			ilsRows, err := getAssociationTargets(ls.Rows[ls.SelectedRow])
+			ilsRows, err := getAssociationTargets(selectedAssociation)
 			if err != nil {
 				exit(1, err)
 			}
