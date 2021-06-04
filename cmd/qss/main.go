@@ -113,6 +113,7 @@ func main() {
 					exit(1, err)
 				}
 				ils.Rows = ilsRows
+				bc.Title = fmt.Sprintf("Target states of the association: %s", ls.Rows[ls.SelectedRow])
 			}
 			previousKey = e.ID
 			ui.Render(grid)
