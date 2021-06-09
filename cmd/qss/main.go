@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"os"
 	"strings"
 	"time"
 
@@ -16,32 +16,39 @@ import (
 )
 
 func main() {
-	if err := ui.Init(); err != nil {
-		log.Fatalf("failed to initialize termui: %v", err)
+	var err error
+
+	if err = ui.Init(); err != nil {
+		exit(1, err)
 	}
-	defer ui.Close()
 
 	termWidth, termHeight := ui.TerminalDimensions()
 
 	ls := widgets.NewList()
 	ls.SelectedRowStyle = ui.NewStyle(ui.ColorCyan)
-	ls.Rows = prepareAssociationList()
+	ls.Rows, err = prepareAssociationList()
+	if err != nil {
+		exit(1, err)
+	}
 	ls.Title = "State Associations"
 	ls.WrapText = true
 
 	ils := widgets.NewList()
 	initialILSRow, err := getAssociationTargets(ls.Rows[0])
 	if err != nil {
-		log.Fatal(err)
+		exit(1, err)
 	}
 	ils.Rows = initialILSRow
 	ils.Title = "Target Selector"
 
 	bc := widgets.NewBarChart()
 	bc.BarWidth = (termWidth - 10) / 2 / 4
-	bc.Title = "All target states of the association"
+	bc.Title = fmt.Sprintf("Target states of the association: %s", ls.Rows[0])
 	bc.Labels = []string{"Success", "Failed", "Pending", "Skipped"}
-	bc.Data = calculateStatusBarChartData(ls.Rows[0])
+	bc.Data, err = calculateStatusBarChartData(ls.Rows[0])
+	if err != nil {
+		exit(1, err)
+	}
 	bc.BarColors = []ui.Color{ui.ColorGreen, ui.ColorRed, ui.ColorYellow, ui.ColorCyan}
 	bc.LabelStyles = []ui.Style{ui.NewStyle(ui.ColorWhite)}
 	bc.NumStyles = []ui.Style{ui.NewStyle(ui.ColorBlack)}
@@ -65,6 +72,7 @@ func main() {
 
 	uiEvents := ui.PollEvents()
 	var previousKey string
+	selectedAssociation := ls.Rows[0]
 	ticker := time.NewTicker(time.Second * 5)
 	defer ticker.Stop()
 	for {
@@ -72,65 +80,53 @@ func main() {
 		case e := <-uiEvents:
 			switch e.ID {
 			case "q", "<C-c>":
-				return
+				exit(0, nil)
 			case "<Down>", "j":
 				ls.ScrollDown()
-				bc.Data = calculateStatusBarChartData(ls.Rows[ls.SelectedRow])
-				ilsRows, err := getAssociationTargets(ls.Rows[ls.SelectedRow])
-				if err != nil {
-					log.Fatal(err)
-				}
-				ils.Rows = ilsRows
 			case "<Up>", "k":
 				ls.ScrollUp()
-				bc.Data = calculateStatusBarChartData(ls.Rows[ls.SelectedRow])
-				ilsRows, err := getAssociationTargets(ls.Rows[ls.SelectedRow])
-				if err != nil {
-					log.Fatal(err)
-				}
-				ils.Rows = ilsRows
 			case "<Home>":
 				ls.ScrollTop()
-				bc.Data = calculateStatusBarChartData(ls.Rows[ls.SelectedRow])
-				ilsRows, err := getAssociationTargets(ls.Rows[ls.SelectedRow])
-				if err != nil {
-					log.Fatal(err)
-				}
-				ils.Rows = ilsRows
 			case "g":
 				if previousKey == "g" {
 					previousKey = ""
 					ls.ScrollTop()
-					bc.Data = calculateStatusBarChartData(ls.Rows[ls.SelectedRow])
-					ilsRows, err := getAssociationTargets(ls.Rows[ls.SelectedRow])
-					if err != nil {
-						log.Fatal(err)
-					}
-					ils.Rows = ilsRows
 				}
 			case "<End>", "G":
 				ls.ScrollBottom()
-				bc.Data = calculateStatusBarChartData(ls.Rows[ls.SelectedRow])
-				ilsRows, err := getAssociationTargets(ls.Rows[ls.SelectedRow])
-				if err != nil {
-					log.Fatal(err)
-				}
-				ils.Rows = ilsRows
 			case "<Resize>":
 				payload := e.Payload.(ui.Resize)
 				bc.BarWidth = (payload.Width - 10) / 2 / 4
 				grid.SetRect(0, 0, payload.Width, payload.Height)
 				ui.Clear()
 			case "r":
-				ls.Rows = prepareAssociationList()
+				ls.Rows, err = prepareAssociationList()
+				if err != nil {
+					exit(1, err)
+				}
+			case "<Enter>":
+				selectedAssociation = ls.Rows[ls.SelectedRow]
+				bc.Data, err = calculateStatusBarChartData(selectedAssociation)
+				if err != nil {
+					exit(1, err)
+				}
+				ilsRows, err := getAssociationTargets(selectedAssociation)
+				if err != nil {
+					exit(1, err)
+				}
+				ils.Rows = ilsRows
+				bc.Title = fmt.Sprintf("Target states of the association: %s", selectedAssociation)
 			}
 			previousKey = e.ID
 			ui.Render(grid)
 		case <-ticker.C:
-			bc.Data = calculateStatusBarChartData(ls.Rows[ls.SelectedRow])
-			ilsRows, err := getAssociationTargets(ls.Rows[ls.SelectedRow])
+			bc.Data, err = calculateStatusBarChartData(selectedAssociation)
 			if err != nil {
-				log.Fatal(err)
+				exit(1, err)
+			}
+			ilsRows, err := getAssociationTargets(selectedAssociation)
+			if err != nil {
+				exit(1, err)
 			}
 			ils.Rows = ilsRows
 			ui.Render(grid)
@@ -138,24 +134,24 @@ func main() {
 	}
 }
 
-func prepareAssociationList() []string {
+func prepareAssociationList() ([]string, error) {
 	associations, err := listAssociations()
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	var associationNames []string
 	for _, a := range associations.Associations {
 		associationNames = append(associationNames, fmt.Sprintf("%s %s", *a.AssociationId, *a.AssociationName))
 	}
-	return associationNames
+	return associationNames, nil
 }
 
-func calculateStatusBarChartData(associationString string) []float64 {
+func calculateStatusBarChartData(associationString string) ([]float64, error) {
 	associationID := strings.Split(associationString, " ")[0]
 	a, err := getAssociation(associationID)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	s := getAssociationSuccessTargets(a)
 	f := getAssociationFailedTargets(a)
@@ -166,7 +162,7 @@ func calculateStatusBarChartData(associationString string) []float64 {
 		//data = append(data, 1)
 		data = []float64{}
 	}
-	return data
+	return data, nil
 }
 
 func listAssociations() (*ssm.ListAssociationsOutput, error) {
@@ -225,4 +221,12 @@ func getAssociationTargets(associationString string) ([]string, error) {
 		result = append(result, fmt.Sprintf("%s:%s", *t.Key, vals))
 	}
 	return result, nil
+}
+
+func exit(exitCode int, err error) {
+	ui.Close()
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+	os.Exit(exitCode)
 }
