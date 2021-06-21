@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -140,8 +141,18 @@ func prepareAssociationList() ([]string, error) {
 		return nil, err
 	}
 
+	if associations == nil {
+		return nil, fmt.Errorf("associations list is empty")
+	}
+
 	var associationNames []string
 	for _, a := range associations.Associations {
+		if a.AssociationName == nil {
+			a.AssociationName = aws.String("None")
+		}
+		if a.AssociationId == nil {
+			exit(1, errors.New("AssociationID is nil, wtf man"))
+		}
 		associationNames = append(associationNames, fmt.Sprintf("%s %s", *a.AssociationId, *a.AssociationName))
 	}
 	return associationNames, nil
