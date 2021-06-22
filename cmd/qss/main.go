@@ -27,32 +27,35 @@ func main() {
 	if err = ui.Init(); err != nil {
 		exit(1, err)
 	}
-
-	UIBusyloop(generateGrid())
+	mainScreen, err := generateMainScreen()
+	if err != nil {
+		exit(1, err)
+	}
+	UIBusyloop(mainScreen)
 }
 
-func generateGrid() *mainScreen {
+func generateMainScreen() (*mainScreen, error) {
 	var err error
 	cfg, err := config.LoadDefaultConfig(context.Background())
 	if err != nil {
-		exit(1, err)
+		return nil, err
 	}
 	ssmClient := ssm.NewFromConfig(cfg)
 	termWidth, termHeight := ui.TerminalDimensions()
 
 	associationList, err := data.NewAssociationList(ssmClient)
 	if err != nil {
-		exit(1, err)
+		return nil, err
 	}
 
 	targetList, err := data.NewTargetList(ssmClient, associationList.Rows[0])
 	if err != nil {
-		exit(1, err)
+		return nil, err
 	}
 
 	statusBarChart, err := data.NewStatusBarChart(ssmClient, termWidth, associationList.Rows[0])
 	if err != nil {
-		exit(1, err)
+		return nil, err
 	}
 
 	grid := ui.NewGrid()
@@ -73,7 +76,7 @@ func generateGrid() *mainScreen {
 		targetList:      targetList,
 		statusBarChart:  statusBarChart,
 	}
-	return mainScreen
+	return mainScreen, nil
 }
 
 func UIBusyloop(ms *mainScreen) {
