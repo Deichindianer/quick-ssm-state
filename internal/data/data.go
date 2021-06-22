@@ -10,6 +10,16 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 )
 
+func getAssociation(ssmClient *ssm.Client, associationID string) (*ssm.DescribeAssociationOutput, error) {
+	association, err := ssmClient.DescribeAssociation(context.Background(), &ssm.DescribeAssociationInput{
+		AssociationId: aws.String(associationID),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return association, nil
+}
+
 func getAssociationTargets(ssmClient *ssm.Client, associationString string) ([]string, error) {
 	associationID := strings.Split(associationString, " ")[0]
 	a, err := getAssociation(ssmClient, associationID)
@@ -40,30 +50,4 @@ func prepareAssociationList(associations *ssm.ListAssociationsOutput) ([]string,
 		associationNames = append(associationNames, fmt.Sprintf("%s %s", *a.AssociationId, *a.AssociationName))
 	}
 	return associationNames, nil
-}
-
-func getAssociation(ssmClient *ssm.Client, associationID string) (*ssm.DescribeAssociationOutput, error) {
-	association, err := ssmClient.DescribeAssociation(context.Background(), &ssm.DescribeAssociationInput{
-		AssociationId: aws.String(associationID),
-	})
-	if err != nil {
-		return nil, err
-	}
-	return association, nil
-}
-
-func getAssociationPendingTargets(association *ssm.DescribeAssociationOutput) float64 {
-	return float64(association.AssociationDescription.Overview.AssociationStatusAggregatedCount["Pending"])
-}
-
-func getAssociationSuccessTargets(association *ssm.DescribeAssociationOutput) float64 {
-	return float64(association.AssociationDescription.Overview.AssociationStatusAggregatedCount["Success"])
-}
-
-func getAssociationFailedTargets(association *ssm.DescribeAssociationOutput) float64 {
-	return float64(association.AssociationDescription.Overview.AssociationStatusAggregatedCount["Failed"])
-}
-
-func getAssociationSkippedTargets(association *ssm.DescribeAssociationOutput) float64 {
-	return float64(association.AssociationDescription.Overview.AssociationStatusAggregatedCount["Skipped"])
 }
