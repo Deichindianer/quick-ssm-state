@@ -21,8 +21,11 @@ func NewAssociationList() (*AssociationList, error) {
 }
 
 func (al *AssociationList) Reload() error {
-	var err error
-	al.Rows, err = prepareAssociationList()
+	associations, err := listAssociations()
+	if err != nil {
+		return err
+	}
+	al.Rows, err = prepareAssociationList(associations)
 	if err != nil {
 		return err
 	}

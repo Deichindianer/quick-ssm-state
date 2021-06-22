@@ -38,12 +38,7 @@ func listAssociations() (*ssm.ListAssociationsOutput, error) {
 	return associations, nil
 }
 
-func prepareAssociationList() ([]string, error) {
-	associations, err := listAssociations()
-	if err != nil {
-		return nil, err
-	}
-
+func prepareAssociationList(associations *ssm.ListAssociationsOutput) ([]string, error) {
 	if associations == nil {
 		return nil, fmt.Errorf("associations list is empty")
 	}
