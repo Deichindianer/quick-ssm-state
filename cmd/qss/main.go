@@ -1,18 +1,12 @@
 package main
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/Deichindianer/quick-ssm-state/internal/data"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ui "github.com/gizak/termui/v3"
 )
 
@@ -47,7 +41,7 @@ func generateGrid() *mainScreen {
 		exit(1, err)
 	}
 
-	bc, err := data.NewStatusBarChart(termWidth, associationList.Rows[0])
+	statusBarChart, err := data.NewStatusBarChart(termWidth, associationList.Rows[0])
 	if err != nil {
 		exit(1, err)
 	}
@@ -59,7 +53,7 @@ func generateGrid() *mainScreen {
 		ui.NewRow(1.0,
 			ui.NewCol(0.5, associationList),
 			ui.NewCol(0.5,
-				ui.NewRow(0.5, bc),
+				ui.NewRow(0.5, statusBarChart),
 				ui.NewRow(0.5, targetList),
 			),
 		),
@@ -68,7 +62,7 @@ func generateGrid() *mainScreen {
 		grid:            grid,
 		associationList: associationList,
 		targetList:      targetList,
-		statusBarChart:  bc,
+		statusBarChart:  statusBarChart,
 	}
 	return mainScreen
 }
@@ -129,87 +123,6 @@ func UIBusyloop(ms *mainScreen) {
 			ui.Render(ms.grid)
 		}
 	}
-}
-
-func prepareAssociationList() ([]string, error) {
-	associations, err := listAssociations()
-	if err != nil {
-		return nil, err
-	}
-
-	if associations == nil {
-		return nil, fmt.Errorf("associations list is empty")
-	}
-
-	var associationNames []string
-	for _, a := range associations.Associations {
-		if a.AssociationName == nil {
-			a.AssociationName = aws.String("None")
-		}
-		if a.AssociationId == nil {
-			exit(1, errors.New("AssociationID is nil, wtf man"))
-		}
-		associationNames = append(associationNames, fmt.Sprintf("%s %s", *a.AssociationId, *a.AssociationName))
-	}
-	return associationNames, nil
-}
-
-func listAssociations() (*ssm.ListAssociationsOutput, error) {
-	cfg, err := config.LoadDefaultConfig(context.Background())
-	if err != nil {
-		return nil, err
-	}
-	awsClient := ssm.NewFromConfig(cfg)
-	associations, err := awsClient.ListAssociations(context.Background(), &ssm.ListAssociationsInput{})
-	if err != nil {
-		return nil, err
-	}
-	return associations, nil
-}
-
-func getAssociation(associationID string) (*ssm.DescribeAssociationOutput, error) {
-	cfg, err := config.LoadDefaultConfig(context.Background())
-	if err != nil {
-		return nil, err
-	}
-	awsClient := ssm.NewFromConfig(cfg)
-	association, err := awsClient.DescribeAssociation(context.Background(), &ssm.DescribeAssociationInput{
-		AssociationId: aws.String(associationID),
-	})
-	if err != nil {
-		return nil, err
-	}
-	return association, nil
-}
-
-func getAssociationPendingTargets(association *ssm.DescribeAssociationOutput) float64 {
-	return float64(association.AssociationDescription.Overview.AssociationStatusAggregatedCount["Pending"])
-}
-
-func getAssociationSuccessTargets(association *ssm.DescribeAssociationOutput) float64 {
-	return float64(association.AssociationDescription.Overview.AssociationStatusAggregatedCount["Success"])
-}
-
-func getAssociationFailedTargets(association *ssm.DescribeAssociationOutput) float64 {
-	return float64(association.AssociationDescription.Overview.AssociationStatusAggregatedCount["Failed"])
-}
-
-func getAssociationSkippedTargets(association *ssm.DescribeAssociationOutput) float64 {
-	return float64(association.AssociationDescription.Overview.AssociationStatusAggregatedCount["Skipped"])
-}
-
-func getAssociationTargets(associationString string) ([]string, error) {
-	associationID := strings.Split(associationString, " ")[0]
-	a, err := getAssociation(associationID)
-	if err != nil {
-		return nil, err
-	}
-	var result []string
-	for _, t := range a.AssociationDescription.Targets {
-		vals := strings.Join(t.Values, ", ")
-		result = append(result, fmt.Sprintf("%s:%s", *t.Key, vals))
-	}
-	return result, nil
 }
 
 func exit(exitCode int, err error) {
