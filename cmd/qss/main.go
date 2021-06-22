@@ -1,9 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"time"
+
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
 	"github.com/Deichindianer/quick-ssm-state/internal/data"
 
@@ -29,19 +33,24 @@ func main() {
 
 func generateGrid() *mainScreen {
 	var err error
+	cfg, err := config.LoadDefaultConfig(context.Background())
+	if err != nil {
+		exit(1, err)
+	}
+	ssmClient := ssm.NewFromConfig(cfg)
 	termWidth, termHeight := ui.TerminalDimensions()
 
-	associationList, err := data.NewAssociationList()
+	associationList, err := data.NewAssociationList(ssmClient)
 	if err != nil {
 		exit(1, err)
 	}
 
-	targetList, err := data.NewTargetList(associationList.Rows[0])
+	targetList, err := data.NewTargetList(ssmClient, associationList.Rows[0])
 	if err != nil {
 		exit(1, err)
 	}
 
-	statusBarChart, err := data.NewStatusBarChart(termWidth, associationList.Rows[0])
+	statusBarChart, err := data.NewStatusBarChart(ssmClient, termWidth, associationList.Rows[0])
 	if err != nil {
 		exit(1, err)
 	}

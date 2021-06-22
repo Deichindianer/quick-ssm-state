@@ -7,13 +7,12 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 )
 
-func getAssociationTargets(associationString string) ([]string, error) {
+func getAssociationTargets(ssmClient *ssm.Client, associationString string) ([]string, error) {
 	associationID := strings.Split(associationString, " ")[0]
-	a, err := getAssociation(associationID)
+	a, err := getAssociation(ssmClient, associationID)
 	if err != nil {
 		return nil, err
 	}
@@ -23,19 +22,6 @@ func getAssociationTargets(associationString string) ([]string, error) {
 		result = append(result, fmt.Sprintf("%s:%s", *t.Key, vals))
 	}
 	return result, nil
-}
-
-func listAssociations() (*ssm.ListAssociationsOutput, error) {
-	cfg, err := config.LoadDefaultConfig(context.Background())
-	if err != nil {
-		return nil, err
-	}
-	awsClient := ssm.NewFromConfig(cfg)
-	associations, err := awsClient.ListAssociations(context.Background(), &ssm.ListAssociationsInput{})
-	if err != nil {
-		return nil, err
-	}
-	return associations, nil
 }
 
 func prepareAssociationList(associations *ssm.ListAssociationsOutput) ([]string, error) {
@@ -56,13 +42,8 @@ func prepareAssociationList(associations *ssm.ListAssociationsOutput) ([]string,
 	return associationNames, nil
 }
 
-func getAssociation(associationID string) (*ssm.DescribeAssociationOutput, error) {
-	cfg, err := config.LoadDefaultConfig(context.Background())
-	if err != nil {
-		return nil, err
-	}
-	awsClient := ssm.NewFromConfig(cfg)
-	association, err := awsClient.DescribeAssociation(context.Background(), &ssm.DescribeAssociationInput{
+func getAssociation(ssmClient *ssm.Client, associationID string) (*ssm.DescribeAssociationOutput, error) {
+	association, err := ssmClient.DescribeAssociation(context.Background(), &ssm.DescribeAssociationInput{
 		AssociationId: aws.String(associationID),
 	})
 	if err != nil {

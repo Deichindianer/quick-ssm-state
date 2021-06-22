@@ -1,16 +1,20 @@
 package data
 
 import (
+	"context"
+
+	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ui "github.com/gizak/termui/v3"
 	"github.com/gizak/termui/v3/widgets"
 )
 
 type AssociationList struct {
 	*widgets.List
+	ssmClient *ssm.Client
 }
 
-func NewAssociationList() (*AssociationList, error) {
-	al := &AssociationList{widgets.NewList()}
+func NewAssociationList(ssmClient *ssm.Client) (*AssociationList, error) {
+	al := &AssociationList{widgets.NewList(), ssmClient}
 	al.SelectedRowStyle = ui.NewStyle(ui.ColorCyan)
 	al.Title = "State Associations"
 	al.WrapText = true
@@ -21,7 +25,7 @@ func NewAssociationList() (*AssociationList, error) {
 }
 
 func (al *AssociationList) Reload() error {
-	associations, err := listAssociations()
+	associations, err := al.ssmClient.ListAssociations(context.Background(), &ssm.ListAssociationsInput{})
 	if err != nil {
 		return err
 	}
