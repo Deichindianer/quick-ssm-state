@@ -6,6 +6,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
@@ -22,6 +24,7 @@ type mainScreen struct {
 }
 
 func main() {
+
 	var err error
 
 	if err = ui.Init(); err != nil {
@@ -40,6 +43,8 @@ func generateMainScreen() (*mainScreen, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	aws.String("test")
 	ssmClient := ssm.NewFromConfig(cfg)
 	termWidth, termHeight := ui.TerminalDimensions()
 
