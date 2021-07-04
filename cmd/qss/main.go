@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -24,7 +25,6 @@ type mainScreen struct {
 }
 
 func main() {
-
 	var err error
 
 	if err = ui.Init(); err != nil {
@@ -85,6 +85,21 @@ func generateMainScreen() (*mainScreen, error) {
 }
 
 func UIBusyloop(ms *mainScreen) {
+	defer func() {
+		r := recover()
+		var err error
+		if r != nil {
+			switch x := r.(type) {
+			case string:
+				err = errors.New(x)
+			case error:
+				err = x
+			default:
+				err = errors.New("unknown panic")
+			}
+		}
+		exit(1, err)
+	}()
 	ui.Render(ms.grid)
 	uiEvents := ui.PollEvents()
 	var previousKey string
