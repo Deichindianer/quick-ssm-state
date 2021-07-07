@@ -8,6 +8,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
+	"github.com/aws/aws-sdk-go-v2/service/ssm/types"
 )
 
 func getAssociation(ssmClient *ssm.Client, associationID string) (*ssm.DescribeAssociationOutput, error) {
@@ -50,4 +51,28 @@ func prepareAssociationList(associations *ssm.ListAssociationsOutput) ([]string,
 		associationNames = append(associationNames, fmt.Sprintf("%s %s", *a.AssociationId, *a.AssociationName))
 	}
 	return associationNames, nil
+}
+
+func GetTargetOutput(ssmClient *ssm.Client, executionTarget types.AssociationExecutionTarget) (string, error) {
+	if executionTarget.OutputSource.OutputSourceType == nil {
+		return "", nil
+	}
+	switch *executionTarget.OutputSource.OutputSourceType {
+	case "Amazon S3":
+		return *executionTarget.OutputSource.OutputSourceId, nil
+	case "RunCommand":
+		command, err := ssmClient.GetCommandInvocation(context.Background(), &ssm.GetCommandInvocationInput{
+			CommandId:  executionTarget.OutputSource.OutputSourceId,
+			InstanceId: executionTarget.ResourceId,
+		})
+		if err != nil {
+			return "", fmt.Errorf("failed to get command output: %s", err)
+		}
+		if command.StandardOutputContent == nil {
+			return "", nil
+		}
+		return *command.StandardOutputContent, nil
+	default:
+		return "", fmt.Errorf("unrecognised output executionTarget: %s; id: %s", *executionTarget.OutputSource.OutputSourceType, *executionTarget.OutputSource.OutputSourceId)
+	}
 }

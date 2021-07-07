@@ -85,21 +85,7 @@ func generateMainScreen() (*mainScreen, error) {
 }
 
 func UIBusyloop(ms *mainScreen) {
-	defer func() {
-		r := recover()
-		var err error
-		if r != nil {
-			switch x := r.(type) {
-			case string:
-				err = errors.New(x)
-			case error:
-				err = x
-			default:
-				err = errors.New("unknown panic")
-			}
-		}
-		exit(1, err)
-	}()
+	defer recoverPanic()
 	ui.Render(ms.grid)
 	uiEvents := ui.PollEvents()
 	var previousKey string
@@ -154,6 +140,22 @@ func UIBusyloop(ms *mainScreen) {
 			}
 			ui.Render(ms.grid)
 		}
+	}
+}
+
+func recoverPanic() {
+	r := recover()
+	var err error
+	if r != nil {
+		switch x := r.(type) {
+		case string:
+			err = errors.New(x)
+		case error:
+			err = x
+		default:
+			err = errors.New("unknown panic")
+		}
+		exit(1, err)
 	}
 }
 
