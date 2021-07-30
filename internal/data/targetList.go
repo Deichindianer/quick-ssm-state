@@ -49,17 +49,9 @@ func (tl *TargetList) Reload(association string) error {
 	}
 	tl.Rows = nil
 	for _, executionTarget := range executionTargets.AssociationExecutionTargets {
-		output, err := GetTargetOutput(tl.ssmClient, executionTarget)
-		if err != nil {
-			return err
-		}
-		row := fmt.Sprintf("%s: %s: %s: %s", *executionTarget.ResourceType, *executionTarget.ResourceId, *executionTarget.Status, output)
+		row := fmt.Sprintf("%s: %s: %s", *executionTarget.ResourceType, *executionTarget.ResourceId, *executionTarget.Status)
 		tl.Rows = append(tl.Rows, row)
 	}
-	//targets, err := getAssociationTargets(tl.ssmClient, association)
-	//if err != nil {
-	//	return err
-	//}
-	//tl.Rows = targets
+
 	return nil
 }

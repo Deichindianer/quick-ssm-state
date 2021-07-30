@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
@@ -19,20 +18,6 @@ func getAssociation(ssmClient *ssm.Client, associationID string) (*ssm.DescribeA
 		return nil, err
 	}
 	return association, nil
-}
-
-func getAssociationTargets(ssmClient *ssm.Client, associationString string) ([]string, error) {
-	associationID := strings.Split(associationString, " ")[0]
-	a, err := getAssociation(ssmClient, associationID)
-	if err != nil {
-		return nil, err
-	}
-	var result []string
-	for _, t := range a.AssociationDescription.Targets {
-		vals := strings.Join(t.Values, ", ")
-		result = append(result, fmt.Sprintf("%s:%s", *t.Key, vals))
-	}
-	return result, nil
 }
 
 func prepareAssociationList(associations *ssm.ListAssociationsOutput) ([]string, error) {
@@ -75,4 +60,19 @@ func GetTargetOutput(ssmClient *ssm.Client, executionTarget types.AssociationExe
 	default:
 		return "", fmt.Errorf("unrecognised output executionTarget: %s; id: %s", *executionTarget.OutputSource.OutputSourceType, *executionTarget.OutputSource.OutputSourceId)
 	}
+}
+
+func getExecutionTargetsFromExecution(o *OutputParagraph, associationID string) (*ssm.DescribeAssociationExecutionTargetsOutput, error) {
+	executions, err := o.ssmClient.DescribeAssociationExecutions(context.Background(), &ssm.DescribeAssociationExecutionsInput{
+		AssociationId: aws.String(associationID),
+		MaxResults:    1,
+	})
+	executionTargets, err := o.ssmClient.DescribeAssociationExecutionTargets(context.Background(), &ssm.DescribeAssociationExecutionTargetsInput{
+		AssociationId: aws.String(associationID),
+		ExecutionId:   executions.AssociationExecutions[0].ExecutionId,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return executionTargets, nil
 }
