@@ -16,7 +16,7 @@ type OutputParagraph struct {
 func NewOutputParagraph(ssmClient *ssm.Client, initialAssociation string) (*OutputParagraph, error) {
 	o := &OutputParagraph{
 		Paragraph: widgets.NewParagraph(),
-		ssmClient:    ssmClient,
+		ssmClient: ssmClient,
 	}
 	if err := o.Reload(initialAssociation); err != nil {
 		return nil, err
