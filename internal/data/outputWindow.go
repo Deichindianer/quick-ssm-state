@@ -1,6 +1,7 @@
 package data
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
@@ -28,6 +29,9 @@ func (o *OutputParagraph) Reload(association string) error {
 	executionTargets, err := getExecutionTargetsFromExecution(o, associationID)
 	if err != nil {
 		return err
+	}
+	if len(executionTargets.AssociationExecutionTargets) < 0 {
+		return errors.New("no execution targets found")
 	}
 	output, err := GetTargetOutput(o.ssmClient, executionTargets.AssociationExecutionTargets[0])
 	if err != nil {
