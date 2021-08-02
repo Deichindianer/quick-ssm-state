@@ -30,7 +30,7 @@ func (o *OutputParagraph) Reload(association string) error {
 	if err != nil {
 		return err
 	}
-	if len(executionTargets.AssociationExecutionTargets) < 0 {
+	if len(executionTargets.AssociationExecutionTargets) <= 0 {
 		return errors.New("no execution targets found")
 	}
 	output, err := GetTargetOutput(o.ssmClient, executionTargets.AssociationExecutionTargets[0])
