@@ -22,7 +22,6 @@ type mainScreen struct {
 	associationList *data.AssociationList
 	targetList      *data.TargetList
 	statusBarChart  *data.StatusBarChart
-	outputParagraph *data.OutputParagraph
 }
 
 func main() {
@@ -64,11 +63,6 @@ func generateMainScreen() (*mainScreen, error) {
 		return nil, err
 	}
 
-	outputParagraph, err := data.NewOutputParagraph(ssmClient, associationList.Rows[0])
-	if err != nil {
-		return nil, err
-	}
-
 	grid := ui.NewGrid()
 	grid.SetRect(0, 0, termWidth, termHeight)
 
@@ -76,7 +70,6 @@ func generateMainScreen() (*mainScreen, error) {
 		ui.NewRow(1.0,
 			ui.NewCol(0.5,
 				ui.NewRow(0.4, associationList),
-				ui.NewRow(0.6, outputParagraph),
 			),
 			ui.NewCol(0.5,
 				ui.NewRow(0.5, statusBarChart),
@@ -89,7 +82,6 @@ func generateMainScreen() (*mainScreen, error) {
 		associationList: associationList,
 		targetList:      targetList,
 		statusBarChart:  statusBarChart,
-		outputParagraph: outputParagraph,
 	}
 	return mainScreen, nil
 }
@@ -139,9 +131,6 @@ func UIBusyloop(ms *mainScreen) {
 				if err := ms.targetList.Reload(selectedAssociation); err != nil {
 					exit(1, err)
 				}
-				if err := ms.outputParagraph.Reload(selectedAssociation); err != nil {
-					exit(1, err)
-				}
 			}
 			previousKey = e.ID
 			ui.Render(ms.grid)
@@ -150,9 +139,6 @@ func UIBusyloop(ms *mainScreen) {
 				exit(1, err)
 			}
 			if err := ms.targetList.Reload(selectedAssociation); err != nil {
-				exit(1, err)
-			}
-			if err := ms.outputParagraph.Reload(selectedAssociation); err != nil {
 				exit(1, err)
 			}
 			ui.Render(ms.grid)
