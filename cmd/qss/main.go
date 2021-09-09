@@ -7,22 +7,12 @@ import (
 	"os"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-
+	"github.com/Deichindianer/quick-ssm-state/internal/mainScreen"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
-	"github.com/Deichindianer/quick-ssm-state/internal/data"
-
 	ui "github.com/gizak/termui/v3"
 )
-
-type mainScreen struct {
-	grid            *ui.Grid
-	associationList *data.AssociationList
-	targetList      *data.TargetList
-	statusBarChart  *data.StatusBarChart
-}
 
 func main() {
 	var err error
@@ -30,68 +20,27 @@ func main() {
 	if err = ui.Init(); err != nil {
 		exit(1, err)
 	}
-	mainScreen, err := generateMainScreen()
+
+	cfg, err := config.LoadDefaultConfig(context.Background())
 	if err != nil {
 		exit(1, err)
 	}
-	UIBusyloop(mainScreen)
-}
 
-func generateMainScreen() (*mainScreen, error) {
-	var err error
-	cfg, err := config.LoadDefaultConfig(context.Background())
-	if err != nil {
-		return nil, err
-	}
-
-	aws.String("test")
 	ssmClient := ssm.NewFromConfig(cfg)
-	termWidth, termHeight := ui.TerminalDimensions()
 
-	associationList, err := data.NewAssociationList(ssmClient)
+	ms, err := mainScreen.New(ssmClient)
 	if err != nil {
-		return nil, err
+		exit(1, err)
 	}
-
-	targetList, err := data.NewTargetList(ssmClient, associationList.Rows[0])
-	if err != nil {
-		return nil, err
-	}
-
-	statusBarChart, err := data.NewStatusBarChart(ssmClient, termWidth, associationList.Rows[0])
-	if err != nil {
-		return nil, err
-	}
-
-	grid := ui.NewGrid()
-	grid.SetRect(0, 0, termWidth, termHeight)
-
-	grid.Set(
-		ui.NewRow(1.0,
-			ui.NewCol(0.5,
-				ui.NewRow(0.4, associationList),
-			),
-			ui.NewCol(0.5,
-				ui.NewRow(0.5, statusBarChart),
-				ui.NewRow(0.5, targetList),
-			),
-		),
-	)
-	mainScreen := &mainScreen{
-		grid:            grid,
-		associationList: associationList,
-		targetList:      targetList,
-		statusBarChart:  statusBarChart,
-	}
-	return mainScreen, nil
+	UIBusyloop(ms)
 }
 
-func UIBusyloop(ms *mainScreen) {
+func UIBusyloop(ms *mainScreen.MainScreen) {
 	defer recoverPanic()
-	ui.Render(ms.grid)
+	ui.Render(ms.Grid)
 	uiEvents := ui.PollEvents()
 	var previousKey string
-	selectedAssociation := ms.associationList.Rows[0]
+	selectedAssociation := ms.AssociationList.Rows[0]
 	ticker := time.NewTicker(time.Second * 5)
 	defer ticker.Stop()
 
@@ -102,46 +51,46 @@ func UIBusyloop(ms *mainScreen) {
 			case "q", "<C-c>":
 				exit(0, nil)
 			case "<Down>", "j":
-				ms.associationList.ScrollDown()
+				ms.AssociationList.ScrollDown()
 			case "<Up>", "k":
-				ms.associationList.ScrollUp()
+				ms.AssociationList.ScrollUp()
 			case "<Home>":
-				ms.associationList.ScrollTop()
+				ms.AssociationList.ScrollTop()
 			case "g":
 				if previousKey == "g" {
 					previousKey = ""
-					ms.associationList.ScrollTop()
+					ms.AssociationList.ScrollTop()
 				}
 			case "<End>", "G":
-				ms.associationList.ScrollBottom()
+				ms.AssociationList.ScrollBottom()
 			case "<Resize>":
 				payload := e.Payload.(ui.Resize)
-				ms.statusBarChart.BarWidth = (payload.Width - 10) / 2 / 4
-				ms.grid.SetRect(0, 0, payload.Width, payload.Height)
+				ms.StatusBarChart.BarWidth = (payload.Width - 10) / 2 / 4
+				ms.Grid.SetRect(0, 0, payload.Width, payload.Height)
 				ui.Clear()
 			case "r":
-				if err := ms.associationList.Reload(); err != nil {
+				if err := ms.AssociationList.Reload(); err != nil {
 					exit(1, err)
 				}
 			case "<Enter>":
-				selectedAssociation = ms.associationList.Rows[ms.associationList.SelectedRow]
-				if err := ms.statusBarChart.Reload(selectedAssociation); err != nil {
+				selectedAssociation = ms.AssociationList.Rows[ms.AssociationList.SelectedRow]
+				if err := ms.StatusBarChart.Reload(selectedAssociation); err != nil {
 					exit(1, err)
 				}
-				if err := ms.targetList.Reload(selectedAssociation); err != nil {
+				if err := ms.TargetList.Reload(selectedAssociation); err != nil {
 					exit(1, err)
 				}
 			}
 			previousKey = e.ID
-			ui.Render(ms.grid)
+			ui.Render(ms.Grid)
 		case <-ticker.C:
-			if err := ms.statusBarChart.Reload(selectedAssociation); err != nil {
+			if err := ms.StatusBarChart.Reload(selectedAssociation); err != nil {
 				exit(1, err)
 			}
-			if err := ms.targetList.Reload(selectedAssociation); err != nil {
+			if err := ms.TargetList.Reload(selectedAssociation); err != nil {
 				exit(1, err)
 			}
-			ui.Render(ms.grid)
+			ui.Render(ms.Grid)
 		}
 	}
 }
